@@ -220,6 +220,9 @@
 </div>
 
 <script>
+// ── API base URL (empty = same origin, set for cross-origin) ──
+const API_BASE = '';
+
 // ── State ──
 let etfList = [];
 let holdingsData = {};
@@ -279,10 +282,10 @@ function calcEMA(closes, period) {
 // ── Initialize ──
 async function init() {
   const [etfRes, holdingsRes, intlRes, intlHoldRes] = await Promise.all([
-    fetch('/api/etfs'),
-    fetch('/api/holdings'),
-    fetch('/api/intl-etfs'),
-    fetch('/api/intl-holdings'),
+    fetch(API_BASE + '/api/etfs'),
+    fetch(API_BASE + '/api/holdings'),
+    fetch(API_BASE + '/api/intl-etfs'),
+    fetch(API_BASE + '/api/intl-holdings'),
   ]);
   etfList = await etfRes.json();
   holdingsData = await holdingsRes.json();
@@ -346,7 +349,7 @@ async function loadMiniChart(ticker, interval, range) {
 
   try {
     const data = await enqueueRequest(() =>
-      fetch(`/api/chart/${ticker}?interval=${interval}&range=${range}`)
+      fetch(`${API_BASE}/api/chart/${ticker}?interval=${interval}&range=${range}`)
         .then(r => r.json())
     );
 
@@ -591,7 +594,7 @@ async function loadModalChart() {
   if (modalChart) { modalChart.remove(); modalChart = null; }
 
   try {
-    const res = await fetch(`/api/chart/${modalTicker}?interval=${modalInterval}&range=${modalRange}`);
+    const res = await fetch(`${API_BASE}/api/chart/${modalTicker}?interval=${modalInterval}&range=${modalRange}`);
     const data = await res.json();
     if (data.error) throw new Error(data.error);
     if (!data.length) throw new Error('No data returned');

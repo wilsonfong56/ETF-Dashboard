@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: finance-sector-dashboard
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn sector_dashboard:app --bind 0.0.0.0:$PORT
+    envVars:
+      - key: MBOUM_KEY
+        sync: false
+      - key: PYTHON_VERSION
+        value: "3.11"
+    plan: free

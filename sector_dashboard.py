@@ -11,9 +11,11 @@ load_dotenv()
 import os
 from datetime import datetime, timedelta
 from flask import Flask, jsonify, render_template, request
+from flask_cors import CORS
 import requests
 
 app = Flask(__name__)
+CORS(app)
 
 # ── Mboum API (same key as main app) ────────────────────────────────────────
 MBOUM_KEY = os.environ.get("MBOUM_KEY", "")
