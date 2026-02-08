@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Finance Dashboard</title>
+<script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+  :root {
+    --bg: #0d1117; --surface: #161b22; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff;
+    --green: #3fb950; --red: #f85149; --yellow: #d29922;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+         background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* ── Header ── */
+  header { background: var(--surface); border-bottom: 1px solid var(--border);
+           padding: 12px 24px; display: flex; align-items: center; gap: 16px; }
+  header h1 { font-size: 18px; font-weight: 600; }
+  .search-box { display: flex; gap: 8px; margin-left: auto; }
+  .search-box input { background: var(--bg); border: 1px solid var(--border);
+    color: var(--text); padding: 8px 14px; border-radius: 6px; font-size: 14px;
+    width: 180px; outline: none; text-transform: uppercase; }
+  .search-box input:focus { border-color: var(--accent); }
+  .search-box button { background: var(--accent); color: #fff; border: none;
+    padding: 8px 18px; border-radius: 6px; cursor: pointer; font-weight: 600;
+    font-size: 14px; }
+  .search-box button:hover { opacity: 0.85; }
+
+  /* ── Tabs ── */
+  .tabs { display: flex; gap: 0; background: var(--surface);
+          border-bottom: 1px solid var(--border); padding: 0 24px; }
+  .tab { padding: 10px 20px; cursor: pointer; color: var(--muted);
+         border-bottom: 2px solid transparent; font-size: 14px; font-weight: 500; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* ── Layout ── */
+  main { padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* ── Cards ── */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+           gap: 12px; margin-bottom: 20px; }
+  .card { background: var(--surface); border: 1px solid var(--border);
+          border-radius: 8px; padding: 14px 16px; }
+  .card .label { font-size: 11px; color: var(--muted); text-transform: uppercase;
+                 letter-spacing: 0.5px; margin-bottom: 4px; }
+  .card .value { font-size: 22px; font-weight: 700; }
+  .card .sub { font-size: 12px; margin-top: 2px; }
+  .positive { color: var(--green); }
+  .negative { color: var(--red); }
+
+  /* ── Tables ── */
+  .table-wrap { overflow-x: auto; margin-bottom: 20px; }
+  .table-wrap .table-header { display: flex; align-items: center; gap: 12px;
+    margin-bottom: 8px; flex-wrap: wrap; }
+  .table-wrap h3 { font-size: 14px; color: var(--muted);
+                   text-transform: uppercase; letter-spacing: 0.5px; margin: 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 8px 10px; color: var(--muted); font-weight: 600;
+       border-bottom: 1px solid var(--border); font-size: 11px;
+       text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer;
+       user-select: none; white-space: nowrap; }
+  th:hover { color: var(--text); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  tr:hover td { background: rgba(88,166,255,0.04); }
+
+  /* ── Filters ── */
+  .filters { display: flex; gap: 10px; align-items: center; margin-bottom: 14px;
+             flex-wrap: wrap; }
+  .filters label { font-size: 12px; color: var(--muted); }
+  .filters select, .filters input[type="number"] {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 5px 8px; border-radius: 4px; font-size: 13px; }
+  .inline-filter select, .inline-filter input[type="number"] {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 4px 6px; border-radius: 4px; font-size: 12px; }
+  .inline-filter { display: flex; gap: 8px; align-items: center; margin-left: auto; }
+  .inline-filter label { font-size: 11px; color: var(--muted); }
+
+  /* ── Chart ── */
+  .chart-container { background: var(--surface); border: 1px solid var(--border);
+                     border-radius: 8px; overflow: hidden; margin-bottom: 20px; }
+
+  /* ── Loading / Empty ── */
+  .loading { text-align: center; padding: 60px; color: var(--muted); }
+  .spinner { display: inline-block; width: 24px; height: 24px;
+    border: 3px solid var(--border); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin 0.6s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .empty-state { text-align: center; padding: 60px; color: var(--muted); }
+  .error-msg { background: rgba(248,81,73,0.1); border: 1px solid var(--red);
+    color: var(--red); padding: 12px 16px; border-radius: 6px; margin: 12px 0; }
+
+  /* ── Timeframe bar ── */
+  .tf-bar { display: flex; gap: 16px; align-items: center; margin-bottom: 10px;
+            flex-wrap: wrap; }
+  .tf-group { display: flex; gap: 4px; align-items: center; }
+  .tf-label { font-size: 11px; color: var(--muted); text-transform: uppercase;
+              letter-spacing: 0.5px; margin-right: 4px; }
+  .tf-btn { background: var(--surface); border: 1px solid var(--border);
+    color: var(--muted); padding: 5px 12px; border-radius: 4px; cursor: pointer;
+    font-size: 12px; font-weight: 500; }
+  .tf-btn:hover { color: var(--text); border-color: var(--text); }
+  .tf-btn.active { color: var(--accent); border-color: var(--accent); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Finance Dashboard</h1>
+  <div class="search-box">
+    <input type="text" id="ticker-input" placeholder="Enter ticker..." value="AAPL"
+           onkeydown="if(event.key==='Enter') fetchAll()">
+    <button onclick="fetchAll()">Analyze</button>
+  </div>
+</header>
+
+<div class="tabs">
+  <div class="tab active" data-panel="overview">Overview</div>
+  <div class="tab" data-panel="options">Options Chain</div>
+  <div class="tab" data-panel="charts">Chart</div>
+</div>
+
+<main>
+  <!-- ── Overview Panel ── -->
+  <div class="panel active" id="panel-overview">
+    <div class="empty-state" id="overview-empty">
+      Enter a ticker symbol above and click <strong>Analyze</strong> to get started.
+    </div>
+    <div id="overview-content" style="display:none">
+      <div class="cards" id="quote-cards"></div>
+
+      <div class="table-wrap">
+        <div class="table-header">
+          <h3>Cheapest Options (Lowest IV vs IV30)</h3>
+          <div class="inline-filter">
+            <label>Type:</label>
+            <select id="cheap-type-filter" onchange="renderOverviewTables()">
+              <option value="all">All</option>
+              <option value="call">Calls</option>
+              <option value="put">Puts</option>
+            </select>
+            <label>Liquidity:</label>
+            <select id="cheap-liq-filter" onchange="renderOverviewTables()">
+              <option value="yes">Vol >= 1K or OI >= 1K</option>
+              <option value="500">Vol >= 500 or OI >= 500</option>
+              <option value="100">Vol >= 100 or OI >= 100</option>
+              <option value="no">No filter</option>
+            </select>
+          </div>
+        </div>
+        <div id="cheap-table"></div>
+      </div>
+
+      <div class="table-wrap">
+        <div class="table-header">
+          <h3>Most Liquid Options</h3>
+          <div class="inline-filter">
+            <label>Type:</label>
+            <select id="liquid-type-filter" onchange="renderOverviewTables()">
+              <option value="all">All</option>
+              <option value="call">Calls</option>
+              <option value="put">Puts</option>
+            </select>
+          </div>
+        </div>
+        <div id="liquid-table"></div>
+      </div>
+
+      <div class="table-wrap">
+        <div class="table-header">
+          <h3>Unusual Activity (Volume >= 3x Open Interest)</h3>
+          <div class="inline-filter">
+            <label>Type:</label>
+            <select id="unusual-type-filter" onchange="renderOverviewTables()">
+              <option value="all">All</option>
+              <option value="call">Calls</option>
+              <option value="put">Puts</option>
+            </select>
+          </div>
+        </div>
+        <div id="unusual-table"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Options Panel ── -->
+  <div class="panel" id="panel-options">
+    <div class="filters" id="options-filters" style="display:none">
+      <label>Type:</label>
+      <select id="opt-type-filter" onchange="renderOptionsTable()">
+        <option value="all">All</option>
+        <option value="call">Calls</option>
+        <option value="put">Puts</option>
+      </select>
+      <label>Expiration:</label>
+      <select id="opt-exp-filter" onchange="renderOptionsTable()"></select>
+      <label>Min Volume:</label>
+      <input type="number" id="opt-vol-filter" value="0" min="0" style="width:80px"
+             onchange="renderOptionsTable()">
+      <label>Min OI:</label>
+      <input type="number" id="opt-oi-filter" value="0" min="0" style="width:80px"
+             onchange="renderOptionsTable()">
+    </div>
+    <div class="empty-state" id="options-empty">
+      Enter a ticker to load the options chain.
+    </div>
+    <div id="options-table"></div>
+  </div>
+
+  <!-- ── Chart Panel ── -->
+  <div class="panel" id="panel-charts">
+    <div class="tf-bar" id="tf-bar">
+      <div class="tf-group">
+        <span class="tf-label">Interval:</span>
+        <button class="tf-btn active" data-interval="1d" data-range="1y">Daily</button>
+        <button class="tf-btn" data-interval="1wk" data-range="5y">Weekly</button>
+        <button class="tf-btn" data-interval="1mo" data-range="max">Monthly</button>
+      </div>
+      <div class="tf-group">
+        <span class="tf-label">Range:</span>
+        <button class="tf-btn" data-range="1mo">1M</button>
+        <button class="tf-btn" data-range="3mo">3M</button>
+        <button class="tf-btn" data-range="6mo">6M</button>
+        <button class="tf-btn active" data-range="1y">1Y</button>
+        <button class="tf-btn" data-range="5y">5Y</button>
+        <button class="tf-btn" data-range="max">Max</button>
+      </div>
+    </div>
+    <div class="chart-container" id="tv-chart-container" style="height: 620px;">
+      <div class="empty-state">Enter a ticker and click <strong>Analyze</strong> to load the chart.</div>
+    </div>
+  </div>
+</main>
+
+<script>
+// ── State ──
+let quoteData = null;
+let optionsData = null;
+let currentTicker = null;
+
+// Per-table sort state: { col, direction } where direction = 'asc' | 'desc' | null
+const tableSorts = { cheap: {}, liquid: {}, unusual: {}, chain: {} };
+
+// ── Tab switching ──
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('panel-' + tab.dataset.panel).classList.add('active');
+  });
+});
+
+// ── Fetch all data ──
+async function fetchAll() {
+  const ticker = document.getElementById('ticker-input').value.trim().toUpperCase();
+  if (!ticker) return;
+  currentTicker = ticker;
+
+  // Show loading
+  document.getElementById('overview-empty').innerHTML =
+    '<div class="spinner"></div><p style="margin-top:12px">Loading ' + ticker + '...</p>';
+  document.getElementById('overview-empty').style.display = '';
+  document.getElementById('overview-content').style.display = 'none';
+  document.getElementById('options-empty').innerHTML =
+    '<div class="spinner"></div><p style="margin-top:12px">Loading options...</p>';
+  document.getElementById('options-empty').style.display = '';
+  document.getElementById('options-filters').style.display = 'none';
+  document.getElementById('options-table').innerHTML = '';
+
+  // Load chart
+  loadChart(ticker);
+
+  // Fetch quote + options in parallel
+  const [quoteRes, optRes] = await Promise.all([
+    fetch('/api/quote/' + ticker),
+    fetch('/api/options/' + ticker),
+  ]);
+
+  // Quote
+  const qj = await quoteRes.json();
+  if (qj.error) {
+    document.getElementById('overview-empty').innerHTML =
+      '<div class="error-msg">' + qj.error + '</div>';
+    document.getElementById('options-empty').innerHTML =
+      '<div class="error-msg">' + qj.error + '</div>';
+    return;
+  }
+  quoteData = qj;
+  renderQuote();
+
+  // Options
+  const oj = await optRes.json();
+  if (oj.error) {
+    document.getElementById('options-empty').innerHTML =
+      '<div class="error-msg">' + oj.error + '</div>';
+  } else {
+    optionsData = oj;
+    renderOverviewTables();
+    setupOptionsFilters();
+    renderOptionsTable();
+  }
+}
+
+// ── Chart (lightweight-charts) ──
+let chartInstance = null;
+let chartResizeObserver = null;
+let chartInterval = '1d';
+let chartRange = '1y';
+
+function calcEMA(closes, period) {
+  const k = 2 / (period + 1);
+  const ema = [closes[0]];
+  for (let i = 1; i < closes.length; i++) {
+    ema.push(closes[i] * k + ema[i - 1] * (1 - k));
+  }
+  return ema;
+}
+
+// Wire up timeframe buttons
+document.getElementById('tf-bar').addEventListener('click', (e) => {
+  const btn = e.target.closest('.tf-btn');
+  if (!btn || !currentTicker) return;
+
+  const group = btn.closest('.tf-group');
+  const isIntervalGroup = group === group.parentElement.firstElementChild;
+
+  if (isIntervalGroup) {
+    // Interval button: sets both interval and range
+    chartInterval = btn.dataset.interval;
+    chartRange = btn.dataset.range;
+    // Update active states in both groups
+    group.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    // Also highlight the matching range button
+    const rangeGroup = group.nextElementSibling;
+    rangeGroup.querySelectorAll('.tf-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.range === chartRange);
+    });
+  } else {
+    // Range button: only changes range, keeps current interval
+    chartRange = btn.dataset.range;
+    group.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+
+  loadChart(currentTicker, chartInterval, chartRange);
+});
+
+async function loadChart(ticker, interval, range) {
+  interval = interval || chartInterval;
+  range = range || chartRange;
+
+  const container = document.getElementById('tv-chart-container');
+  container.innerHTML = '<div class="loading"><div class="spinner"></div><p style="margin-top:8px">Loading chart...</p></div>';
+
+  let data;
+  try {
+    const res = await fetch(`/api/chart/${ticker}?interval=${interval}&range=${range}`);
+    data = await res.json();
+    if (data.error) throw new Error(data.error);
+    if (!data.length) throw new Error('No data returned');
+  } catch (e) {
+    container.innerHTML = '<div class="error-msg">Chart error: ' + e.message + '</div>';
+    return;
+  }
+
+  container.innerHTML = '';
+
+  if (chartResizeObserver) { chartResizeObserver.disconnect(); chartResizeObserver = null; }
+  if (chartInstance) { chartInstance.remove(); chartInstance = null; }
+
+  chartInstance = LightweightCharts.createChart(container, {
+    width: container.clientWidth,
+    height: 620,
+    layout: { background: { color: '#161b22' }, textColor: '#8b949e' },
+    grid: { vertLines: { color: '#1e252e' }, horzLines: { color: '#1e252e' } },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+    rightPriceScale: { borderColor: '#30363d' },
+    timeScale: { borderColor: '#30363d', timeVisible: false },
+  });
+
+  // Candlestick series
+  const candleSeries = chartInstance.addCandlestickSeries({
+    upColor: '#3fb950', downColor: '#f85149',
+    borderUpColor: '#3fb950', borderDownColor: '#f85149',
+    wickUpColor: '#3fb950', wickDownColor: '#f85149',
+  });
+  candleSeries.setData(data.map(d => ({
+    time: d.time, open: d.open, high: d.high, low: d.low, close: d.close,
+  })));
+
+  // Volume
+  const volSeries = chartInstance.addHistogramSeries({
+    priceFormat: { type: 'volume' },
+    priceScaleId: 'vol',
+  });
+  chartInstance.priceScale('vol').applyOptions({
+    scaleMargins: { top: 0.85, bottom: 0 },
+  });
+  volSeries.setData(data.map(d => ({
+    time: d.time, value: d.volume,
+    color: d.close >= d.open ? 'rgba(63,185,80,0.25)' : 'rgba(248,81,73,0.25)',
+  })));
+
+  // EMAs
+  const closes = data.map(d => d.close);
+
+  const ema8vals = calcEMA(closes, 8);
+  const ema8series = chartInstance.addLineSeries({
+    color: '#4CAF50', lineWidth: 2, priceLineVisible: false,
+    lastValueVisible: false, crosshairMarkerVisible: false,
+  });
+  ema8series.setData(data.map((d, i) => ({ time: d.time, value: parseFloat(ema8vals[i].toFixed(2)) })));
+
+  const ema21vals = calcEMA(closes, 21);
+  const ema21series = chartInstance.addLineSeries({
+    color: '#F44336', lineWidth: 2, priceLineVisible: false,
+    lastValueVisible: false, crosshairMarkerVisible: false,
+  });
+  ema21series.setData(data.map((d, i) => ({ time: d.time, value: parseFloat(ema21vals[i].toFixed(2)) })));
+
+  chartInstance.timeScale().fitContent();
+
+  chartResizeObserver = new ResizeObserver(() => {
+    if (chartInstance) chartInstance.applyOptions({ width: container.clientWidth });
+  });
+  chartResizeObserver.observe(container);
+}
+
+// ── Render quote cards ──
+function renderQuote() {
+  const q = quoteData;
+  const changeCls = q.change >= 0 ? 'positive' : 'negative';
+  const changeSign = q.change >= 0 ? '+' : '';
+
+  let ivRankHtml = 'N/A';
+  if (q.iv_rank !== null) {
+    const rankCls = q.iv_rank < 30 ? 'positive' : q.iv_rank > 70 ? 'negative' : '';
+    ivRankHtml = `<span class="${rankCls}">${q.iv_rank.toFixed(1)}%</span>`;
+  }
+
+  let ivPctHtml = 'N/A';
+  if (q.iv_percentile !== null) {
+    ivPctHtml = q.iv_percentile.toFixed(1) + '%';
+  }
+
+  document.getElementById('quote-cards').innerHTML = `
+    <div class="card">
+      <div class="label">${q.ticker}</div>
+      <div class="value">$${q.price.toFixed(2)}</div>
+      <div class="sub ${changeCls}">${changeSign}${q.change.toFixed(2)} (${changeSign}${q.change_pct.toFixed(2)}%)</div>
+    </div>
+    <div class="card">
+      <div class="label">Day Range</div>
+      <div class="value" style="font-size:16px">$${q.low.toFixed(2)} — $${q.high.toFixed(2)}</div>
+      <div class="sub">Open: $${q.open.toFixed(2)}</div>
+    </div>
+    <div class="card">
+      <div class="label">IV30</div>
+      <div class="value">${q.iv30.toFixed(1)}%</div>
+      <div class="sub ${q.iv30_change >= 0 ? 'positive' : 'negative'}">
+        ${q.iv30_change >= 0 ? '+' : ''}${q.iv30_change.toFixed(1)}% chg
+      </div>
+    </div>
+    <div class="card">
+      <div class="label">IV Rank</div>
+      <div class="value">${ivRankHtml}</div>
+      <div class="sub">${q.iv_history_days} day(s) history</div>
+    </div>
+    <div class="card">
+      <div class="label">IV Percentile</div>
+      <div class="value">${ivPctHtml}</div>
+    </div>
+    <div class="card">
+      <div class="label">Volume</div>
+      <div class="value" style="font-size:16px">${(q.volume || 0).toLocaleString()}</div>
+    </div>
+  `;
+
+  document.getElementById('overview-empty').style.display = 'none';
+  document.getElementById('overview-content').style.display = 'block';
+}
+
+// ── Render overview tables (with filters) ──
+function renderOverviewTables() {
+  if (!optionsData) return;
+  const opts = optionsData.options;
+  const iv30 = optionsData.iv30;
+
+  // ── Cheapest options ──
+  const cheapType = document.getElementById('cheap-type-filter').value;
+  const cheapLiq = document.getElementById('cheap-liq-filter').value;
+
+  let cheap = opts.filter(o => o.iv > 0);
+  if (cheapType !== 'all') cheap = cheap.filter(o => o.type === cheapType);
+
+  if (cheapLiq === 'yes') cheap = cheap.filter(o => o.volume >= 1000 || o.oi >= 1000);
+  else if (cheapLiq === '500') cheap = cheap.filter(o => o.volume >= 500 || o.oi >= 500);
+  else if (cheapLiq === '100') cheap = cheap.filter(o => o.volume >= 100 || o.oi >= 100);
+
+  cheap = applySortOrDefault(cheap, 'cheap', 'ivVsIV30', 'asc');
+  cheap = cheap.slice(0, 20);
+
+  const cheapCols = ['type','strike','expiration','dte','bid','ask','mid','volume','oi','iv','ivVsIV30','delta','probITM','probProfit'];
+  document.getElementById('cheap-table').innerHTML = cheap.length
+    ? buildTable(cheap, cheapCols, 'cheap')
+    : '<div class="empty-state" style="padding:20px">No options match the current filters</div>';
+
+  // ── Most liquid ──
+  const liquidType = document.getElementById('liquid-type-filter').value;
+  let liquid = opts.filter(o => o.volume >= 200 && o.oi >= 500);
+  if (liquidType !== 'all') liquid = liquid.filter(o => o.type === liquidType);
+
+  liquid = applySortOrDefault(liquid, 'liquid', 'volume', 'desc');
+  liquid = liquid.slice(0, 20);
+
+  const liquidCols = ['type','strike','expiration','dte','bid','ask','volume','oi','iv','delta','probITM'];
+  document.getElementById('liquid-table').innerHTML = liquid.length
+    ? buildTable(liquid, liquidCols, 'liquid')
+    : '<div class="empty-state" style="padding:20px">No liquid options found</div>';
+
+  // ── Unusual activity ──
+  const unusualType = document.getElementById('unusual-type-filter').value;
+  let unusual = opts.filter(o => o.volume >= 1000 && o.oi > 0 && (o.volume / o.oi) >= 3);
+  let zeroOi = opts.filter(o => o.volume >= 2000 && o.oi === 0);
+  unusual = unusual.concat(zeroOi);
+  if (unusualType !== 'all') unusual = unusual.filter(o => o.type === unusualType);
+
+  unusual = applySortOrDefault(unusual, 'unusual', 'volume', 'desc');
+  unusual = unusual.slice(0, 20);
+
+  const unusualCols = ['type','strike','expiration','dte','bid','ask','mid','volume','oi','iv','delta','probITM'];
+  document.getElementById('unusual-table').innerHTML = unusual.length
+    ? buildTable(unusual, unusualCols, 'unusual')
+    : '<div class="empty-state" style="padding:20px">No unusual activity detected</div>';
+}
+
+// ── Options chain filters + table ──
+function setupOptionsFilters() {
+  const sel = document.getElementById('opt-exp-filter');
+  sel.innerHTML = '<option value="all">All</option>';
+  optionsData.expirations.forEach(exp => {
+    sel.innerHTML += `<option value="${exp}">${exp}</option>`;
+  });
+  document.getElementById('options-filters').style.display = 'flex';
+  document.getElementById('options-empty').style.display = 'none';
+}
+
+function renderOptionsTable() {
+  if (!optionsData) return;
+  let rows = [...optionsData.options];
+
+  const typeF = document.getElementById('opt-type-filter').value;
+  const expF = document.getElementById('opt-exp-filter').value;
+  const volF = parseInt(document.getElementById('opt-vol-filter').value) || 0;
+  const oiF = parseInt(document.getElementById('opt-oi-filter').value) || 0;
+
+  if (typeF !== 'all') rows = rows.filter(r => r.type === typeF);
+  if (expF !== 'all') rows = rows.filter(r => r.expiration === expF);
+  if (volF > 0) rows = rows.filter(r => r.volume >= volF);
+  if (oiF > 0) rows = rows.filter(r => r.oi >= oiF);
+
+  rows = applySortOrDefault(rows, 'chain', null, null);
+
+  const cols = ['type','strike','expiration','dte','bid','ask','mid','last','volume','oi','iv','ivVsIV30','delta','theta','gamma','vega','probITM','probProfit','moneyness'];
+  document.getElementById('options-table').innerHTML = rows.length
+    ? buildTable(rows, cols, 'chain')
+    : '<div class="empty-state">No options match the current filters</div>';
+}
+
+// ── Sorting helpers ──
+
+// Apply user sort if set, otherwise fall back to a default sort
+function applySortOrDefault(rows, tableId, defaultCol, defaultDir) {
+  const s = tableSorts[tableId];
+  const col = s.col || null;
+  const dir = s.direction || null;
+
+  if (col && dir) {
+    rows = [...rows];
+    rows.sort((a, b) => {
+      const va = a[col], vb = b[col];
+      if (typeof va === 'string') return dir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+      return dir === 'asc' ? va - vb : vb - va;
+    });
+  } else if (defaultCol && defaultDir) {
+    rows = [...rows];
+    rows.sort((a, b) => {
+      const va = a[defaultCol], vb = b[defaultCol];
+      if (typeof va === 'string') return defaultDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+      return defaultDir === 'asc' ? va - vb : vb - va;
+    });
+  }
+  return rows;
+}
+
+// Cycle: none → asc → desc → none
+function sortByTable(tableId, col) {
+  const s = tableSorts[tableId];
+  if (s.col === col) {
+    if (s.direction === 'asc') s.direction = 'desc';
+    else if (s.direction === 'desc') { s.col = null; s.direction = null; }
+    else s.direction = 'asc';
+  } else {
+    s.col = col;
+    s.direction = 'asc';
+  }
+
+  // Re-render the right table
+  if (tableId === 'chain') renderOptionsTable();
+  else renderOverviewTables();
+}
+
+// ── Table builder ──
+function buildTable(rows, cols, tableId) {
+  const s = tableSorts[tableId] || {};
+  let html = '<table><thead><tr>';
+  cols.forEach(c => {
+    let arrow = '';
+    if (s.col === c) arrow = s.direction === 'asc' ? ' ↑' : s.direction === 'desc' ? ' ↓' : '';
+    html += `<th onclick="sortByTable('${tableId}','${c}')">${c}${arrow}</th>`;
+  });
+  html += '</tr></thead><tbody>';
+  rows.forEach(r => {
+    html += '<tr>';
+    cols.forEach(c => {
+      let v = r[c];
+      let cls = '';
+      if (c === 'type') cls = v === 'call' ? 'positive' : 'negative';
+      if (c === 'ivVsIV30') cls = v < 0 ? 'positive' : v > 0 ? 'negative' : '';
+      if (c === 'moneyness') cls = v < 0 ? 'negative' : v > 0 ? 'positive' : '';
+      if (typeof v === 'number' && !Number.isInteger(v)) v = v.toFixed(2);
+      if (c === 'volume' || c === 'oi') v = Number(v).toLocaleString();
+      html += `<td class="${cls}">${v}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  return html;
+}
+</script>
+
+</body>
+</html>
