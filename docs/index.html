@@ -115,6 +115,68 @@
   .weight-val { font-size: 11px; color: var(--muted); min-width: 36px; text-align: right; }
   .ticker-link { color: var(--accent); cursor: pointer; text-decoration: none; }
   .ticker-link:hover { text-decoration: underline; }
+
+  /* ── Signals tab ── */
+  .signals-toolbar { position: sticky; top: 0; z-index: 10; background: var(--bg);
+    padding: 10px 0; display: flex; align-items: center; gap: 12px; }
+  .signals-toolbar input { background: var(--bg); border: 1px solid var(--border);
+    color: var(--text); padding: 8px 14px; border-radius: 6px; font-size: 14px;
+    width: 320px; outline: none; }
+  .signals-toolbar input:focus { border-color: var(--accent); }
+
+  .signals-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .signals-table th { text-align: left; padding: 8px 12px; color: var(--muted);
+    font-weight: 600; border-bottom: 1px solid var(--border); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer;
+    user-select: none; white-space: nowrap; }
+  .signals-table th:hover { color: var(--text); }
+  .signals-table th .sort-arrow { margin-left: 4px; font-size: 10px; }
+  .signals-table td { padding: 7px 12px; border-bottom: 1px solid rgba(48,54,61,0.5); }
+  .signals-table tr:hover { background: rgba(88,166,255,0.04); }
+
+  .score-badge { display: inline-block; min-width: 32px; padding: 2px 8px;
+    border-radius: 4px; text-align: center; font-weight: 700; font-size: 12px; }
+  .score-badge.high { background: rgba(63,185,80,0.2); color: var(--green); }
+  .score-badge.mid  { background: rgba(210,153,34,0.2); color: var(--yellow); }
+  .score-badge.low  { background: rgba(248,81,73,0.2); color: var(--red); }
+
+  .group-tag { display: inline-block; font-size: 9px; font-weight: 700;
+    padding: 1px 5px; border-radius: 3px; letter-spacing: 0.5px;
+    background: rgba(88,166,255,0.15); color: var(--accent); margin-left: 6px;
+    vertical-align: middle; }
+
+  /* ── Regime banner ── */
+  .regime-banner { background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 16px 20px; margin-bottom: 14px;
+    display: flex; align-items: center; gap: 24px; border-left: 4px solid var(--border); }
+  .regime-banner.risk-on { border-left-color: var(--green); }
+  .regime-banner.risk-off { border-left-color: var(--yellow); }
+  .regime-banner.liquidation { border-left-color: var(--red); }
+  .regime-banner.mixed { border-left-color: var(--accent); }
+  .regime-label { font-size: 20px; font-weight: 800; letter-spacing: 1px; min-width: 130px; }
+  .regime-banner.risk-on .regime-label { color: var(--green); }
+  .regime-banner.risk-off .regime-label { color: var(--yellow); }
+  .regime-banner.liquidation .regime-label { color: var(--red); }
+  .regime-banner.mixed .regime-label { color: var(--accent); }
+  .regime-stats { display: flex; gap: 20px; flex-wrap: wrap; }
+  .regime-stat { display: flex; flex-direction: column; gap: 2px; }
+  .regime-stat .stat-label { font-size: 10px; color: var(--muted); text-transform: uppercase;
+    letter-spacing: 0.5px; }
+  .regime-stat .stat-value { font-size: 14px; font-weight: 700; }
+
+  /* ── Flow tags ── */
+  .flow-tag { display: inline-block; font-size: 11px; font-weight: 700;
+    padding: 2px 8px; border-radius: 4px; }
+  .flow-tag.flow-accum { background: rgba(63,185,80,0.15); color: var(--green); }
+  .flow-tag.flow-distrib { background: rgba(248,81,73,0.15); color: var(--red); }
+  .flow-tag.flow-neutral { background: rgba(139,148,158,0.15); color: var(--muted); }
+
+  /* ── Risk tags ── */
+  .risk-tag { display: inline-block; font-size: 10px; font-weight: 700;
+    padding: 2px 7px; border-radius: 4px; letter-spacing: 0.3px; }
+  .risk-tag.risk-on { border: 1px solid var(--green); color: var(--green); background: rgba(63,185,80,0.08); }
+  .risk-tag.risk-off { border: 1px solid var(--yellow); color: var(--yellow); background: rgba(210,153,34,0.08); }
+  .risk-tag.risk-neutral { border: 1px solid var(--muted); color: var(--muted); background: rgba(139,148,158,0.08); }
 </style>
 </head>
 <body>
@@ -127,6 +189,7 @@
   <div class="tab active" data-panel="charts">Charts</div>
   <div class="tab" data-panel="holdings">Holdings</div>
   <div class="tab" data-panel="international">International</div>
+  <div class="tab" data-panel="signals">Signals</div>
 </div>
 
 <main>
@@ -188,6 +251,20 @@
              oninput="filterHoldings('intl-holdings-grid', 'intl-holdings-search')">
     </div>
     <div class="holdings-grid" id="intl-holdings-grid"></div>
+  </div>
+
+  <!-- ── Signals Panel ── -->
+  <div class="panel" id="panel-signals">
+    <div class="signals-toolbar">
+      <input type="text" id="signals-search" placeholder="Filter by ticker or sector..."
+             oninput="filterSignals()">
+    </div>
+    <div id="regime-banner"></div>
+    <div id="signals-loading" style="display:none;padding:40px;text-align:center">
+      <div class="spinner"></div>
+      <div style="color:var(--muted);margin-top:12px;font-size:13px">Loading signals for all ETFs...</div>
+    </div>
+    <div id="signals-table-wrap"></div>
   </div>
 </main>
 
@@ -266,6 +343,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
     tab.classList.add('active');
     document.getElementById('panel-' + tab.dataset.panel).classList.add('active');
+    if (tab.dataset.panel === 'signals') loadSignals();
   });
 });
 
@@ -722,6 +800,150 @@ function filterHoldings(gridId, inputId) {
     const desc = card.dataset.description;
     card.style.display = (!q || ticker.includes(q) || desc.includes(q)) ? '' : 'none';
   });
+}
+
+// ── Signals ──
+let signalsData = null;
+let signalsRegime = null;
+let signalsLoaded = false;
+let signalsSortCol = 'momentum';
+let signalsSortAsc = false;
+
+async function loadSignals() {
+  if (signalsLoaded) return;
+  signalsLoaded = true;
+  document.getElementById('signals-loading').style.display = 'block';
+  try {
+    const res = await fetch(API_BASE + '/api/signals');
+    const payload = await res.json();
+    signalsRegime = payload.regime;
+    signalsData = payload.etfs;
+    renderRegimeBanner(signalsRegime);
+    renderSignalsTable();
+  } catch (e) {
+    document.getElementById('signals-table-wrap').innerHTML =
+      `<div style="color:var(--red);padding:20px">Failed to load signals: ${e.message}</div>`;
+  } finally {
+    document.getElementById('signals-loading').style.display = 'none';
+  }
+}
+
+function scoreClass(val) {
+  if (val >= 7) return 'high';
+  if (val >= 4) return 'mid';
+  return 'low';
+}
+
+function renderRegimeBanner(regime) {
+  if (!regime) return;
+  const classMap = { 'RISK-ON': 'risk-on', 'RISK-OFF': 'risk-off', 'LIQUIDATION': 'liquidation', 'MIXED': 'mixed' };
+  const cls = classMap[regime.label] || 'mixed';
+  const el = document.getElementById('regime-banner');
+  el.innerHTML = `
+    <div class="regime-banner ${cls}">
+      <div class="regime-label">${regime.label}</div>
+      <div class="regime-stats">
+        <div class="regime-stat">
+          <span class="stat-label">Risk-On Breadth</span>
+          <span class="stat-value">${regime.risk_on_breadth.toFixed(0)}%</span>
+        </div>
+        <div class="regime-stat">
+          <span class="stat-label">Risk-Off Breadth</span>
+          <span class="stat-value">${regime.risk_off_breadth.toFixed(0)}%</span>
+        </div>
+        <div class="regime-stat">
+          <span class="stat-label">Avg Mom (On)</span>
+          <span class="stat-value">${regime.risk_on_avg_mom}</span>
+        </div>
+        <div class="regime-stat">
+          <span class="stat-label">Avg Mom (Off)</span>
+          <span class="stat-value">${regime.risk_off_avg_mom}</span>
+        </div>
+        <div class="regime-stat">
+          <span class="stat-label">Accum</span>
+          <span class="stat-value" style="color:var(--green)">${regime.accum_count}</span>
+        </div>
+        <div class="regime-stat">
+          <span class="stat-label">Distrib</span>
+          <span class="stat-value" style="color:var(--red)">${regime.distrib_count}</span>
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderSignalsTable() {
+  if (!signalsData) return;
+  const q = document.getElementById('signals-search').value.toLowerCase().trim();
+  let data = signalsData;
+  if (q) {
+    data = data.filter(d =>
+      d.ticker.toLowerCase().includes(q) || d.description.toLowerCase().includes(q)
+    );
+  }
+
+  // Sort
+  data = [...data].sort((a, b) => {
+    let va = a[signalsSortCol], vb = b[signalsSortCol];
+    if (typeof va === 'string') { va = va.toLowerCase(); vb = (vb || '').toLowerCase(); }
+    if (va < vb) return signalsSortAsc ? -1 : 1;
+    if (va > vb) return signalsSortAsc ? 1 : -1;
+    return 0;
+  });
+
+  const arrow = col => col === signalsSortCol
+    ? `<span class="sort-arrow">${signalsSortAsc ? '\u25B2' : '\u25BC'}</span>` : '';
+
+  const riskTagClass = rc => rc === 'risk-on' ? 'risk-on' : rc === 'risk-off' ? 'risk-off' : 'risk-neutral';
+  const riskTagLabel = rc => rc === 'risk-on' ? 'RISK-ON' : rc === 'risk-off' ? 'RISK-OFF' : 'NEUTRAL';
+  const flowTagClass = f => f === 'Accum' ? 'flow-accum' : f === 'Distrib' ? 'flow-distrib' : 'flow-neutral';
+
+  let html = `<table class="signals-table">
+    <thead><tr>
+      <th data-col="ticker">Ticker${arrow('ticker')}</th>
+      <th data-col="risk_class">Type${arrow('risk_class')}</th>
+      <th data-col="description">Sector / Region${arrow('description')}</th>
+      <th data-col="price">Price${arrow('price')}</th>
+      <th data-col="change_1m">1M Chg%${arrow('change_1m')}</th>
+      <th data-col="momentum">Momentum${arrow('momentum')}</th>
+      <th data-col="rs">Rel Strength${arrow('rs')}</th>
+      <th data-col="flow">Flow${arrow('flow')}</th>
+    </tr></thead><tbody>`;
+
+  data.forEach(d => {
+    const chgColor = d.change_1m >= 0 ? 'var(--green)' : 'var(--red)';
+    const groupLabel = d.group === 'intl' ? 'INTL' : 'US';
+    html += `<tr>
+      <td style="font-weight:700"><span class="ticker-link" onclick="openModal('${d.ticker}', '${d.description.replace(/'/g, "\\'")}')">${d.ticker}</span><span class="group-tag">${groupLabel}</span></td>
+      <td><span class="risk-tag ${riskTagClass(d.risk_class)}">${riskTagLabel(d.risk_class)}</span></td>
+      <td style="color:var(--muted)">${d.description}</td>
+      <td>$${d.price.toFixed(2)}</td>
+      <td style="color:${chgColor};font-weight:600">${d.change_1m >= 0 ? '+' : ''}${d.change_1m.toFixed(2)}%</td>
+      <td><span class="score-badge ${scoreClass(d.momentum)}">${d.momentum}</span></td>
+      <td><span class="score-badge ${scoreClass(d.rs)}">${d.rs}</span></td>
+      <td><span class="flow-tag ${flowTagClass(d.flow)}">${d.flow}</span></td>
+    </tr>`;
+  });
+
+  html += '</tbody></table>';
+  document.getElementById('signals-table-wrap').innerHTML = html;
+
+  // Attach sort handlers
+  document.querySelectorAll('.signals-table th').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = th.dataset.col;
+      if (signalsSortCol === col) {
+        signalsSortAsc = !signalsSortAsc;
+      } else {
+        signalsSortCol = col;
+        signalsSortAsc = col === 'ticker' || col === 'description' || col === 'risk_class' || col === 'flow';
+      }
+      renderSignalsTable();
+    });
+  });
+}
+
+function filterSignals() {
+  renderSignalsTable();
 }
 
 // ── Start ──
