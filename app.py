@@ -10,6 +10,7 @@ load_dotenv()
 import json
 import os
 import re
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -258,7 +259,8 @@ def api_options(ticker):
 
 
 MBOUM_KEY = os.environ.get("MBOUM_KEY", "")
-_chart_cache = {}  # (ticker, interval) -> records list
+_chart_cache = {}  # (ticker, interval) -> {"data": [...], "fetched_at": ts}
+CHART_CACHE_TTL = 900  # 15 minutes (matches Mboum API delay)
 
 RANGE_DAYS = {
     "1mo": 30, "3mo": 90, "6mo": 180, "1y": 365, "5y": 1825, "max": 999999,
@@ -268,8 +270,9 @@ RANGE_DAYS = {
 def _fetch_mboum(ticker, interval):
     """Fetch all history from mboum for a ticker+interval, with simple cache."""
     cache_key = (ticker.upper(), interval)
-    if cache_key in _chart_cache:
-        return _chart_cache[cache_key]
+    cached = _chart_cache.get(cache_key)
+    if cached and (time.time() - cached["fetched_at"]) < CHART_CACHE_TTL:
+        return cached["data"]
 
     resp = requests.get(
         "https://api.mboum.com/v1/markets/stock/history",
@@ -295,7 +298,7 @@ def _fetch_mboum(ticker, interval):
                 "volume": val.get("volume", 0),
             })
     records.sort(key=lambda r: r["time"])
-    _chart_cache[cache_key] = records
+    _chart_cache[cache_key] = {"data": records, "fetched_at": time.time()}
     return records
 
 
