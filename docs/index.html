@@ -816,6 +816,7 @@ async function loadSignals() {
   try {
     const res = await fetch(API_BASE + '/api/signals');
     const payload = await res.json();
+    if (payload.error) throw new Error(payload.error);
     signalsRegime = payload.regime;
     signalsData = payload.etfs;
     renderRegimeBanner(signalsRegime);

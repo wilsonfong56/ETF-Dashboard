@@ -218,64 +218,65 @@ def _compute_signals_for_etf(ticker, description):
     """
     try:
         records = _fetch_mboum(ticker, "1d")
-    except Exception:
+        if not records or len(records) < 50:
+            return None
+
+        closes = [r["close"] for r in records]
+
+        price = closes[-1]
+        rsi = _calc_rsi(closes, 14)
+        ema21 = _calc_ema(closes, 21)
+
+        # ── Momentum (1-10, higher = stronger uptrend) ──
+        # RSI component (40%)
+        if rsi < 30:
+            rsi_score = _linear_score(rsi, 0, 30) * 2 / 10  # 1-2
+            rsi_score = _clamp(rsi_score, 1, 2)
+        elif rsi < 50:
+            rsi_score = 3 + (rsi - 30) / 20  # 3-4
+        elif rsi < 70:
+            rsi_score = 5 + 2 * (rsi - 50) / 20  # 5-7
+        else:
+            rsi_score = 7 + 3 * (rsi - 70) / 30  # 7-10
+        rsi_score = _clamp(rsi_score, 1, 10)
+
+        # Price vs EMA(21) (30%)
+        pct_from_ema = (price - ema21[-1]) / ema21[-1] * 100
+        ema_score = _linear_score(pct_from_ema, -10, 10)
+
+        # 1-month return (30%) — 21 trading days
+        idx_1m = max(0, len(closes) - 22)
+        ret_1m = (price - closes[idx_1m]) / closes[idx_1m] * 100
+        ret_score = _linear_score(ret_1m, -15, 15)
+
+        momentum = round(rsi_score * 0.4 + ema_score * 0.3 + ret_score * 0.3, 1)
+
+        # ── Flow direction (Accum / Distrib / Neutral) ──
+        recent = records[-10:]
+        up_vol = sum(r["volume"] for r in recent if r["close"] >= r["open"])
+        total_vol = sum(r["volume"] for r in recent)
+        up_vol_ratio = up_vol / total_vol if total_vol > 0 else 0.5
+
+        if up_vol_ratio > 0.58:
+            flow = "Accum"
+        elif up_vol_ratio < 0.42:
+            flow = "Distrib"
+        else:
+            flow = "Neutral"
+
+        return {
+            "ticker": ticker,
+            "description": description,
+            "price": round(price, 2),
+            "change_1m": round(ret_1m, 2),
+            "risk_class": RISK_CLASS.get(ticker, "neutral"),
+            "momentum": momentum,
+            "rs": 5.0,  # placeholder — filled in second pass
+            "flow": flow,
+        }
+    except Exception as e:
+        print(f"[signals] {ticker} failed: {e}")
         return None
-    if not records or len(records) < 50:
-        return None
-
-    closes = [r["close"] for r in records]
-
-    price = closes[-1]
-    rsi = _calc_rsi(closes, 14)
-    ema21 = _calc_ema(closes, 21)
-
-    # ── Momentum (1-10, higher = stronger uptrend) ──
-    # RSI component (40%)
-    if rsi < 30:
-        rsi_score = _linear_score(rsi, 0, 30) * 2 / 10  # 1-2
-        rsi_score = _clamp(rsi_score, 1, 2)
-    elif rsi < 50:
-        rsi_score = 3 + (rsi - 30) / 20  # 3-4
-    elif rsi < 70:
-        rsi_score = 5 + 2 * (rsi - 50) / 20  # 5-7
-    else:
-        rsi_score = 7 + 3 * (rsi - 70) / 30  # 7-10
-    rsi_score = _clamp(rsi_score, 1, 10)
-
-    # Price vs EMA(21) (30%)
-    pct_from_ema = (price - ema21[-1]) / ema21[-1] * 100
-    ema_score = _linear_score(pct_from_ema, -10, 10)
-
-    # 1-month return (30%) — 21 trading days
-    idx_1m = max(0, len(closes) - 22)
-    ret_1m = (price - closes[idx_1m]) / closes[idx_1m] * 100
-    ret_score = _linear_score(ret_1m, -15, 15)
-
-    momentum = round(rsi_score * 0.4 + ema_score * 0.3 + ret_score * 0.3, 1)
-
-    # ── Flow direction (Accum / Distrib / Neutral) ──
-    recent = records[-10:]
-    up_vol = sum(r["volume"] for r in recent if r["close"] >= r["open"])
-    total_vol = sum(r["volume"] for r in recent)
-    up_vol_ratio = up_vol / total_vol if total_vol > 0 else 0.5
-
-    if up_vol_ratio > 0.58:
-        flow = "Accum"
-    elif up_vol_ratio < 0.42:
-        flow = "Distrib"
-    else:
-        flow = "Neutral"
-
-    return {
-        "ticker": ticker,
-        "description": description,
-        "price": round(price, 2),
-        "change_1m": round(ret_1m, 2),
-        "risk_class": RISK_CLASS.get(ticker, "neutral"),
-        "momentum": momentum,
-        "rs": 5.0,  # placeholder — filled in second pass
-        "flow": flow,
-    }
 
 
 # ── Routes ──────────────────────────────────────────────────────────────────
@@ -347,58 +348,62 @@ def api_signals():
     if _signals_cache["data"] is not None and (now - _signals_cache["fetched_at"]) < SIGNALS_CACHE_TTL:
         return jsonify(_signals_cache["data"])
 
-    results = []
-    for ticker, desc in ETF_REGISTRY.items():
-        sig = _compute_signals_for_etf(ticker, desc)
-        if sig:
-            sig["group"] = "sector"
-            results.append(sig)
-    for ticker, desc in INTL_REGISTRY.items():
-        sig = _compute_signals_for_etf(ticker, desc)
-        if sig:
-            sig["group"] = "intl"
-            results.append(sig)
+    try:
+        results = []
+        for ticker, desc in ETF_REGISTRY.items():
+            sig = _compute_signals_for_etf(ticker, desc)
+            if sig:
+                sig["group"] = "sector"
+                results.append(sig)
+        for ticker, desc in INTL_REGISTRY.items():
+            sig = _compute_signals_for_etf(ticker, desc)
+            if sig:
+                sig["group"] = "intl"
+                results.append(sig)
 
-    # ── Second pass: Relative Strength vs peer average ──
-    if results:
-        avg_ret = sum(r["change_1m"] for r in results) / len(results)
-        for r in results:
-            r["rs"] = round(_linear_score(r["change_1m"] - avg_ret, -10, 10), 1)
+        # ── Second pass: Relative Strength vs peer average ──
+        if results:
+            avg_ret = sum(r["change_1m"] for r in results) / len(results)
+            for r in results:
+                r["rs"] = round(_linear_score(r["change_1m"] - avg_ret, -10, 10), 1)
 
-    # ── Regime summary ──
-    risk_on = [r for r in results if r["risk_class"] == "risk-on"]
-    risk_off = [r for r in results if r["risk_class"] == "risk-off"]
+        # ── Regime summary ──
+        risk_on = [r for r in results if r["risk_class"] == "risk-on"]
+        risk_off = [r for r in results if r["risk_class"] == "risk-off"]
 
-    ro_breadth = (sum(1 for r in risk_on if r["momentum"] >= 5.5) / len(risk_on) * 100) if risk_on else 0
-    rf_breadth = (sum(1 for r in risk_off if r["momentum"] >= 5.5) / len(risk_off) * 100) if risk_off else 0
-    ro_avg_mom = round(sum(r["momentum"] for r in risk_on) / len(risk_on), 1) if risk_on else 0
-    rf_avg_mom = round(sum(r["momentum"] for r in risk_off) / len(risk_off), 1) if risk_off else 0
-    accum_count = sum(1 for r in results if r["flow"] == "Accum")
-    distrib_count = sum(1 for r in results if r["flow"] == "Distrib")
+        ro_breadth = (sum(1 for r in risk_on if r["momentum"] >= 5.5) / len(risk_on) * 100) if risk_on else 0
+        rf_breadth = (sum(1 for r in risk_off if r["momentum"] >= 5.5) / len(risk_off) * 100) if risk_off else 0
+        ro_avg_mom = round(sum(r["momentum"] for r in risk_on) / len(risk_on), 1) if risk_on else 0
+        rf_avg_mom = round(sum(r["momentum"] for r in risk_off) / len(risk_off), 1) if risk_off else 0
+        accum_count = sum(1 for r in results if r["flow"] == "Accum")
+        distrib_count = sum(1 for r in results if r["flow"] == "Distrib")
 
-    if ro_breadth > 50 and rf_breadth < 50:
-        regime_label = "RISK-ON"
-    elif rf_breadth > 50 and ro_breadth < 50:
-        regime_label = "RISK-OFF"
-    elif ro_breadth < 40 and rf_breadth < 40:
-        regime_label = "LIQUIDATION"
-    else:
-        regime_label = "MIXED"
+        if ro_breadth > 50 and rf_breadth < 50:
+            regime_label = "RISK-ON"
+        elif rf_breadth > 50 and ro_breadth < 50:
+            regime_label = "RISK-OFF"
+        elif ro_breadth < 40 and rf_breadth < 40:
+            regime_label = "LIQUIDATION"
+        else:
+            regime_label = "MIXED"
 
-    regime = {
-        "label": regime_label,
-        "risk_on_avg_mom": ro_avg_mom,
-        "risk_off_avg_mom": rf_avg_mom,
-        "risk_on_breadth": round(ro_breadth, 1),
-        "risk_off_breadth": round(rf_breadth, 1),
-        "accum_count": accum_count,
-        "distrib_count": distrib_count,
-    }
+        regime = {
+            "label": regime_label,
+            "risk_on_avg_mom": ro_avg_mom,
+            "risk_off_avg_mom": rf_avg_mom,
+            "risk_on_breadth": round(ro_breadth, 1),
+            "risk_off_breadth": round(rf_breadth, 1),
+            "accum_count": accum_count,
+            "distrib_count": distrib_count,
+        }
 
-    payload = {"regime": regime, "etfs": results}
-    _signals_cache["data"] = payload
-    _signals_cache["fetched_at"] = now
-    return jsonify(payload)
+        payload = {"regime": regime, "etfs": results}
+        _signals_cache["data"] = payload
+        _signals_cache["fetched_at"] = now
+        return jsonify(payload)
+    except Exception as e:
+        print(f"[signals] endpoint error: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":
