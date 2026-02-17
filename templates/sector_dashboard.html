@@ -73,17 +73,13 @@
     background: rgba(0,0,0,0.8); align-items: center; justify-content: center; }
   .modal-overlay.active { display: flex; }
   .modal-content { background: var(--surface); border: 1px solid var(--border);
-    border-radius: 10px; width: 90vw; max-width: 1200px; max-height: 90vh;
-    overflow: auto; }
-  .modal-header { display: flex; align-items: center; justify-content: space-between;
-    padding: 14px 20px; border-bottom: 1px solid var(--border); }
-  .modal-header h2 { font-size: 18px; font-weight: 700; }
-  .modal-header .close-btn { background: none; border: none; color: var(--muted);
-    font-size: 24px; cursor: pointer; padding: 0 4px; }
-  .modal-header .close-btn:hover { color: var(--text); }
-  .modal-tf-bar { display: flex; gap: 12px; align-items: center; padding: 10px 20px;
-    flex-wrap: wrap; }
-  .modal-chart-container { height: 500px; }
+    border-radius: 10px; width: 92%; height: 88%; position: relative;
+    overflow: hidden; }
+  .modal-content .close-btn { position: absolute; top: 8px; right: 12px; font-size: 28px;
+    color: var(--muted); cursor: pointer; z-index: 1001; background: none; border: none;
+    line-height: 1; }
+  .modal-content .close-btn:hover { color: var(--text); }
+  .modal-content iframe { width: 100%; height: 100%; border: none; }
 
   /* ── Holdings tab ── */
   .holdings-filter { margin-bottom: 14px; position: sticky; top: 0; z-index: 10;
@@ -269,30 +265,10 @@
 </main>
 
 <!-- ── Modal ── -->
-<div class="modal-overlay" id="modal-overlay">
+<div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()">
   <div class="modal-content">
-    <div class="modal-header">
-      <h2 id="modal-title"></h2>
-      <button class="close-btn" onclick="closeModal()">&times;</button>
-    </div>
-    <div class="modal-tf-bar" id="modal-tf-bar">
-      <div class="tf-group">
-        <span class="tf-label">Interval:</span>
-        <button class="tf-btn active" data-interval="1d" data-range="1y">Daily</button>
-        <button class="tf-btn" data-interval="1wk" data-range="5y">Weekly</button>
-        <button class="tf-btn" data-interval="1mo" data-range="max">Monthly</button>
-      </div>
-      <div class="tf-group">
-        <span class="tf-label">Range:</span>
-        <button class="tf-btn" data-range="1mo">1M</button>
-        <button class="tf-btn" data-range="3mo">3M</button>
-        <button class="tf-btn" data-range="6mo">6M</button>
-        <button class="tf-btn active" data-range="1y">1Y</button>
-        <button class="tf-btn" data-range="5y">5Y</button>
-        <button class="tf-btn" data-range="max">Max</button>
-      </div>
-    </div>
-    <div class="modal-chart-container" id="modal-chart-container"></div>
+    <button class="close-btn" onclick="closeModal()">&times;</button>
+    <iframe id="tv-iframe" src=""></iframe>
   </div>
 </div>
 
@@ -592,154 +568,24 @@ document.getElementById('intl-tf-bar').addEventListener('click', (e) => {
     'intl');
 });
 
-// ── Modal ──
-let modalChart = null;
-let modalTicker = null;
-let modalInterval = '1d';
-let modalRange = '1y';
-let modalResizeObserver = null;
-
+// ── Modal (TradingView embed) ──
 function openModal(ticker, description) {
-  modalTicker = ticker;
-  modalInterval = '1d';
-  modalRange = '1y';
-  document.getElementById('modal-title').textContent = `${ticker} — ${description}`;
+  const iframe = document.getElementById('tv-iframe');
+  iframe.src = 'https://s.tradingview.com/widgetembed/?symbol=' + ticker +
+    '&interval=D&hideideas=1&theme=dark&style=1&timezone=exchange&withdateranges=1' +
+    '&hide_side_toolbar=0&allow_symbol_change=1&saveimage=0&toolbarbg=161b22';
   document.getElementById('modal-overlay').classList.add('active');
-
-  // Reset modal timeframe buttons
-  const bar = document.getElementById('modal-tf-bar');
-  bar.querySelectorAll('.tf-group').forEach((group, idx) => {
-    group.querySelectorAll('.tf-btn').forEach(b => {
-      if (idx === 0) {
-        b.classList.toggle('active', b.dataset.interval === '1d');
-      } else {
-        b.classList.toggle('active', b.dataset.range === '1y');
-      }
-    });
-  });
-
-  loadModalChart();
 }
 
 function closeModal() {
   document.getElementById('modal-overlay').classList.remove('active');
-  if (modalChart) { modalChart.remove(); modalChart = null; }
-  if (modalResizeObserver) { modalResizeObserver.disconnect(); modalResizeObserver = null; }
-  modalTicker = null;
+  document.getElementById('tv-iframe').src = '';
 }
-
-// Close on overlay click (not content)
-document.getElementById('modal-overlay').addEventListener('click', (e) => {
-  if (e.target === e.currentTarget) closeModal();
-});
 
 // Close on Escape
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeModal();
 });
-
-// Modal timeframe bar
-document.getElementById('modal-tf-bar').addEventListener('click', (e) => {
-  const btn = e.target.closest('.tf-btn');
-  if (!btn || !modalTicker) return;
-
-  const group = btn.closest('.tf-group');
-  const isIntervalGroup = group === group.parentElement.firstElementChild;
-
-  if (isIntervalGroup) {
-    modalInterval = btn.dataset.interval;
-    modalRange = btn.dataset.range;
-    group.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    const rangeGroup = group.nextElementSibling;
-    rangeGroup.querySelectorAll('.tf-btn').forEach(b => {
-      b.classList.toggle('active', b.dataset.range === modalRange);
-    });
-  } else {
-    modalRange = btn.dataset.range;
-    group.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-  }
-
-  loadModalChart();
-});
-
-async function loadModalChart() {
-  const container = document.getElementById('modal-chart-container');
-  container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%"><div class="spinner"></div></div>';
-
-  if (modalResizeObserver) { modalResizeObserver.disconnect(); modalResizeObserver = null; }
-  if (modalChart) { modalChart.remove(); modalChart = null; }
-
-  try {
-    const res = await fetch(`${API_BASE}/api/chart/${modalTicker}?interval=${modalInterval}&range=${modalRange}`);
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
-    if (!data.length) throw new Error('No data returned');
-
-    container.innerHTML = '';
-
-    modalChart = LightweightCharts.createChart(container, {
-      width: container.clientWidth,
-      height: 500,
-      layout: { background: { color: '#161b22' }, textColor: '#8b949e' },
-      grid: { vertLines: { color: '#1e252e' }, horzLines: { color: '#1e252e' } },
-      crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
-      rightPriceScale: { borderColor: '#30363d' },
-      timeScale: { borderColor: '#30363d', timeVisible: false },
-    });
-
-    const candleSeries = modalChart.addCandlestickSeries({
-      upColor: '#3fb950', downColor: '#f85149',
-      borderUpColor: '#3fb950', borderDownColor: '#f85149',
-      wickUpColor: '#3fb950', wickDownColor: '#f85149',
-    });
-    candleSeries.setData(data.map(d => ({
-      time: d.time, open: d.open, high: d.high, low: d.low, close: d.close,
-    })));
-
-    // Volume
-    const volSeries = modalChart.addHistogramSeries({
-      priceFormat: { type: 'volume' },
-      priceScaleId: 'vol',
-    });
-    modalChart.priceScale('vol').applyOptions({
-      scaleMargins: { top: 0.85, bottom: 0 },
-    });
-    volSeries.setData(data.map(d => ({
-      time: d.time, value: d.volume,
-      color: d.close >= d.open ? 'rgba(63,185,80,0.25)' : 'rgba(248,81,73,0.25)',
-    })));
-
-    // EMAs
-    const closes = data.map(d => d.close);
-    if (closes.length > 0) {
-      const ema8vals = calcEMA(closes, 8);
-      const ema8s = modalChart.addLineSeries({
-        color: '#4CAF50', lineWidth: 2, priceLineVisible: false,
-        lastValueVisible: false, crosshairMarkerVisible: false,
-      });
-      ema8s.setData(data.map((d, i) => ({ time: d.time, value: parseFloat(ema8vals[i].toFixed(2)) })));
-
-      const ema21vals = calcEMA(closes, 21);
-      const ema21s = modalChart.addLineSeries({
-        color: '#F44336', lineWidth: 2, priceLineVisible: false,
-        lastValueVisible: false, crosshairMarkerVisible: false,
-      });
-      ema21s.setData(data.map((d, i) => ({ time: d.time, value: parseFloat(ema21vals[i].toFixed(2)) })));
-    }
-
-    modalChart.timeScale().fitContent();
-
-    modalResizeObserver = new ResizeObserver(() => {
-      if (modalChart) modalChart.applyOptions({ width: container.clientWidth });
-    });
-    modalResizeObserver.observe(container);
-
-  } catch (e) {
-    container.innerHTML = `<div style="color:var(--red);padding:20px">Chart error: ${e.message}</div>`;
-  }
-}
 
 // ── Holdings Grid ──
 function buildHoldingsGrid(gridId, etfs, holdings) {

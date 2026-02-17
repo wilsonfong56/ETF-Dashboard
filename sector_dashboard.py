@@ -161,6 +161,8 @@ def _fetch_mboum(ticker, interval):
             o, h, l, c = val.get("open"), val.get("high"), val.get("low"), val.get("close")
             if o is None or h is None or l is None or c is None:
                 continue
+            if o <= 0 or h <= 0 or l <= 0 or c <= 0:
+                continue
             records.append({
                 "time": val["date"],
                 "open": o, "high": h, "low": l, "close": c,
